@@ -69,6 +69,9 @@ object RepositoryIterator {
       iter = iter.filter(ids.contains(_))
     }
 
+    val l = iter.toList
+    iter = l.toIterator
+
     iter
   }
 

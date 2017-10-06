@@ -31,7 +31,10 @@ abstract class RootedRepoIterator[T](finalColumns: Array[String],
   private var iter: Iterator[T] = _
 
   /** The current row of the prevIter, null always if there is no prevIter. */
-  private var currentRow: RawRow = _
+  private var prevIterCurrentRow: RawRow = _
+
+  /** The current row of the internal iterator. */
+  private[iterator] var currentRow: T = _
 
   /**
     * Returns the internal iterator that will return the data used to construct the final row.
@@ -46,16 +49,7 @@ abstract class RootedRepoIterator[T](finalColumns: Array[String],
     *
     * @return internal iterator
     */
-  private def loadIterator: Iterator[T] = loadIterator(getFilters(currentRow))
-
-  /**
-    * Returns the filters to be given to loadIterator when it's called. It's meant
-    * to be overridden for iterators that need to pass extra filters depending on the
-    * current row of the previous iterator.
-    *
-    * @return
-    */
-  protected def getFilters(currentRow: RawRow): Seq[CompiledFilter] = filters
+  private def loadIterator: Iterator[T] = loadIterator(filters)
 
   /**
     * Given the object returned by the internal iterator, this method must transform
@@ -85,7 +79,7 @@ abstract class RootedRepoIterator[T](finalColumns: Array[String],
         return false
       }
 
-      currentRow = prevIter.nextRaw
+      prevIterCurrentRow = prevIter.nextRaw
       iter = loadIterator
       iter.hasNext
     } else if (!iter.hasNext) {
@@ -93,7 +87,7 @@ abstract class RootedRepoIterator[T](finalColumns: Array[String],
         return false
       }
 
-      currentRow = prevIter.nextRaw
+      prevIterCurrentRow = prevIter.nextRaw
       iter = loadIterator
       iter.hasNext
     } else {
@@ -102,10 +96,11 @@ abstract class RootedRepoIterator[T](finalColumns: Array[String],
   }
 
   override def next: Row = {
-    val mappedValues = if (currentRow != null) {
-      currentRow ++ mapColumns(iter.next)
+    currentRow = iter.next
+    val mappedValues = if (prevIterCurrentRow != null) {
+      prevIterCurrentRow ++ mapColumns(currentRow)
     } else {
-      mapColumns(iter.next)
+      mapColumns(currentRow)
     }
 
     val values = finalColumns.map(c => mappedValues(c)())
@@ -115,8 +110,8 @@ abstract class RootedRepoIterator[T](finalColumns: Array[String],
 
   def nextRaw: RawRow = {
     val row = mapColumns(iter.next())
-    if (currentRow != null) {
-      currentRow ++ row
+    if (prevIterCurrentRow != null) {
+      prevIterCurrentRow ++ row
     } else {
       row
     }

@@ -7,7 +7,6 @@ import org.eclipse.jgit.treewalk.TreeWalk
 import org.slf4j.Logger
 import tech.sourced.api.util.{Attr, CompiledFilter, EqualExpr}
 
-
 /**
   * Iterator that will return rows of files in a repository.
   *
@@ -23,24 +22,15 @@ class BlobIterator(finalColumns: Array[String],
   extends RootedRepoIterator[CommitTree](finalColumns, repo, prevIter, filters) with Logging {
 
   /** @inheritdoc*/
-  override def getFilters(currentRow: RawRow): Seq[CompiledFilter] = {
-    if (currentRow != null) {
-      val id = currentRow("repository_id")().toString
-      val refName = currentRow("reference_name")().toString
-      val hash = currentRow("hash")().toString
-      filters ++ Seq(
-        EqualExpr(Attr("repository_id", "commits"), id),
-        EqualExpr(Attr("reference_name", "commits"), refName),
-        EqualExpr(Attr("hash", "commits"), hash)
-      )
-    } else {
-      filters
-    }
-  }
-
-  /** @inheritdoc*/
   override protected def loadIterator(filters: Seq[CompiledFilter]): Iterator[CommitTree] = {
-    CommitIterator.loadIterator(repo, filters.flatMap(_.matchingCases)).flatMap(c => {
+    CommitIterator.loadIterator(
+      repo,
+      Option(prevIter) match {
+        case Some(it) => Option(it.currentRow).map(_.ref)
+        case None => None
+      },
+      filters.flatMap(_.matchingCases)
+    ).flatMap(c => {
       val commitId = c.commit.getId
       if (repo.hasObject(commitId)) {
         JGitBlobIterator(getCommitTree(commitId), log)

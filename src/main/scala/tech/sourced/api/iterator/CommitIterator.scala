@@ -7,7 +7,7 @@ import org.eclipse.jgit.errors.IncorrectObjectTypeException
 import org.eclipse.jgit.lib.{ObjectId, Ref, Repository}
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.treewalk.TreeWalk
-import tech.sourced.api.util.{Attr, CompiledFilter, EqualExpr, Filter}
+import tech.sourced.api.util.{CompiledFilter, Filter}
 
 import scala.collection.JavaConverters.iterableAsScalaIterableConverter
 
@@ -25,25 +25,18 @@ class CommitIterator(finalColumns: Array[String],
                      filters: Seq[CompiledFilter])
   extends RootedRepoIterator[ReferenceWithCommit](finalColumns, repo, prevIter, filters) {
 
-  /** @inheritdoc*/
-  override def getFilters(currentRow: RawRow): Seq[CompiledFilter] = {
-    if (currentRow != null) {
-      val id = currentRow("repository_id")().asInstanceOf[String]
-      val refName = currentRow("name")().asInstanceOf[String]
-      filters ++ Seq(
-        EqualExpr(Attr("repository_id", "commits"), id),
-        EqualExpr(Attr("reference_name", "commits"), refName)
-      )
-    } else {
-      filters
-    }
-  }
-
   type T = Iterator[ReferenceWithCommit]
 
   /** @inheritdoc */
   override protected def loadIterator(filters: Seq[CompiledFilter]): T =
-    CommitIterator.loadIterator(repo, filters.flatMap(_.matchingCases))
+    CommitIterator.loadIterator(
+      repo,
+      Option(prevIter) match {
+        case Some(it) => Option(it.currentRow)
+        case None => None
+      },
+      filters.flatMap(_.matchingCases)
+    )
 
   /** @inheritdoc*/
   override protected def mapColumns(obj: ReferenceWithCommit): Map[String, () => Any] = {
@@ -110,11 +103,28 @@ object CommitIterator {
     * @return the iterator
     */
   def loadIterator(repo: Repository,
-                   filters: Seq[Filter.Match]): Iterator[ReferenceWithCommit] = {
-    val refs = ReferenceIterator.loadIterator(repo, filters, "repository_id", "reference_name")
-    val hashes = filters.flatMap {
-      case ("hash", h) => h.map(_.toString)
-      case _ => Seq()
+                   ref: Option[Ref],
+                   filters: Seq[Filter.Match],
+                   hashKey: String = "hash"): Iterator[ReferenceWithCommit] = {
+    val refs = ref match {
+      case Some(r) =>
+        val filterRefs = filters.flatMap {
+          case ("reference_name", references) => references.map(_.toString)
+          case _ => Seq()
+        }
+
+        val (_, refName) = RootedRepo.parseRef(repo, r.getName)
+        if (filterRefs.isEmpty || filterRefs.contains(refName)) {
+          Seq(r).toIterator
+        } else {
+          Seq().toIterator
+        }
+      case None => ReferenceIterator.loadIterator(
+        repo,
+        None,
+        filters,
+        refNameKey = "reference_name"
+      )
     }
 
     val indexes = filters.flatMap {
@@ -122,11 +132,21 @@ object CommitIterator {
       case _ => Seq()
     }
 
-    val refsL = refs.toList
+    val hashes = filters.flatMap {
+      case (k, h) if k == hashKey => h.map(_.toString)
+      case _ => Seq()
+    }
 
-    new RefWithCommitIterator(repo, refsL.toIterator)
-      .filter(c => hashes.isEmpty || hashes.contains(c.commit.getId.getName))
-      .filter(c => indexes.isEmpty || indexes.contains(c.index))
+    var iter: Iterator[ReferenceWithCommit] = new RefWithCommitIterator(repo, refs)
+    if (hashes.nonEmpty) {
+      iter = iter.filter(c => hashes.contains(c.commit.getId.getName))
+    }
+
+    if (indexes.nonEmpty) {
+      iter = iter.filter(c => indexes.contains(c.index))
+    }
+
+    iter
   }
 
 }

@@ -20,18 +20,15 @@ class ReferenceIterator(finalColumns: Array[String],
   extends RootedRepoIterator[Ref](finalColumns, repo, prevIter, filters) {
 
   /** @inheritdoc*/
-  override def getFilters(currentRow: RawRow): Seq[CompiledFilter] = {
-    if (currentRow != null) {
-      val id = currentRow("id")().asInstanceOf[String]
-      filters ++ Seq(EqualExpr(Attr("repository_id", "references"), id))
-    } else {
-      filters
-    }
-  }
-
-  /** @inheritdoc*/
   protected def loadIterator(filters: Seq[CompiledFilter]): Iterator[Ref] =
-    ReferenceIterator.loadIterator(repo, filters.flatMap(_.matchingCases))
+    ReferenceIterator.loadIterator(
+      repo,
+      Option(prevIter) match {
+        case Some(it) => Option(it.currentRow)
+        case None => None
+      },
+      filters.flatMap(_.matchingCases)
+    )
 
   /** @inheritdoc*/
   override protected def mapColumns(ref: Ref): Map[String, () => Any] = {
@@ -44,7 +41,7 @@ class ReferenceIterator(finalColumns: Array[String],
         refName
       }),
       "hash" -> (() => {
-        ObjectId.toString(ref.getObjectId)
+        ObjectId.toString(Option(ref.getPeeledObjectId).getOrElse(ref.getObjectId))
       })
     )
   }
@@ -65,6 +62,7 @@ object ReferenceIterator {
     * @return the iterator
     */
   def loadIterator(repo: Repository,
+                   repoId: Option[String],
                    filters: Seq[Filter.Match],
                    repoKey: String = "repository_id",
                    refNameKey: String = "name"): Iterator[Ref] = {
@@ -73,7 +71,17 @@ object ReferenceIterator {
       case _ => Seq()
     }
 
-    val repoIds = RepositoryIterator.loadIterator(repo, filters, "repository_id").toArray
+    val repoIds: Array[String] = repoId match {
+      case Some(id) =>
+        val filterRepos = filters.flatMap {
+          case (k, repos) if k == repoKey => repos.map(_.toString)
+          case _ => Seq()
+        }
+
+        if (filterRepos.isEmpty || filterRepos.contains(id)) Array(id) else Array()
+      case None =>
+        RepositoryIterator.loadIterator(repo, filters, "repository_id").toArray
+    }
 
     repo.getAllRefs.asScala.values.toIterator.filter(ref => {
       val (repoId, refName) = RootedRepo.parseRef(repo, ref.getName)

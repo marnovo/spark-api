@@ -28,27 +28,25 @@ object SquashGitRelationJoin extends Rule[LogicalPlan] {
 
       jd match {
         case JoinData(filters, joinConditions, projectExprs, attributes, Some(sqlc), _) =>
-          val f = filters.getOrElse(EqualTo(
-            Literal(false, BooleanType),
-            Literal(true, BooleanType)
-          ))
-
-          val filter = Filter(f,
-            LogicalRelation(
-              GitRelation(
-                sqlc,
-                GitOptimizer.attributesToSchema(attributes), joinConditions
-              ),
-              attributes,
-              None
-            )
+          val relation = LogicalRelation(
+            GitRelation(
+              sqlc,
+              GitOptimizer.attributesToSchema(attributes), joinConditions
+            ),
+            attributes,
+            None
           )
+
+          val node = filters match {
+            case Some(filter) => Filter(filter, relation)
+            case None => relation
+          }
 
           // If the projection is empty, just return the filter
           if (projectExprs.nonEmpty) {
-            Project(projectExprs, filter)
+            Project(projectExprs, node)
           } else {
-            filter
+            node
           }
         case _ => q
       }

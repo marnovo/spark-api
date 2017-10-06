@@ -89,12 +89,12 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
   "Filter by reference from repos dataframe" should "work" in {
     val spark = ss
 
-    val count = SparkAPI(spark, resourcePath)
+    val df = SparkAPI(spark, resourcePath)
       .getRepositories
       .getReference("refs/heads/develop")
-      .count()
 
-    assert(count == 2)
+    df.show
+    assert(df.count == 2)
   }
 
   "Filter by reference from commits dataframe" should "work" in {
@@ -124,10 +124,9 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
 
   "Filter by HEAD reference" should "return only HEAD references" in {
     val spark = ss
-    val count = SparkAPI(spark, resourcePath).getRepositories.getHEAD
-      .select("name").distinct().count()
-
-    assert(count == 1)
+    val df = SparkAPI(spark, resourcePath).getRepositories.getHEAD
+    df.show
+    assert(df.count == 1)
   }
 
   "Filter by master reference" should "return only master references" in {
@@ -163,6 +162,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
     val spark = ss
     val files = SparkAPI(spark, resourcePath).getRepositories.getReferences.getCommits.getFiles
 
+    files.show(100)
     assert(files.count == 1536360)
   }
 
@@ -211,6 +211,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
     val spark = ss
     val files = SparkAPI(spark, resourcePath)
       .getFiles(commitHashes = List("fff7062de8474d10a67d417ccea87ba6f58ca81d"))
+    files.explain(true)
 
     assert(files.count == 86)
   }
