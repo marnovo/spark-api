@@ -4,33 +4,69 @@ import org.scalatest._
 
 class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with BaseSparkSpec {
 
-  "Default source" should "load correctly" in {
-    ss.sqlContext.setConf(repositoriesPathKey, resourcePath)
+  var api: SparkAPI = _
 
-    val reposDf = ss.read.format("tech.sourced.api")
-      .option("table", "repositories")
-      .load(resourcePath)
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+
+    api = SparkAPI(ss, resourcePath)
+  }
+
+  // TODO race condition sometimes
+  "Default source" should "get heads of all repositories and count the files" in {
+    val out = api.getRepositories.getHEAD.getCommits.getFirstReferenceCommit.getFiles.count()
+    out should be(459)
+  }
+
+  "Default source" should "count all the commit messages from all masters that are not forks" in {
+    val commits = api.getRepositories.filter("is_fork = false").getMaster.getCommits
+    val out = commits.select("message").filter(commits("message").startsWith("a")).count()
+    out should be(7)
+  }
+
+  "Default source" should "count all commits messages from all references that are not forks" in {
+    val commits = api.getRepositories.filter("is_fork = false").getReferences.getCommits
+    val out = commits.select("message").filter(commits("message").startsWith("a")).count()
+    out should be(98)
+  }
+
+  "Default source" should "get all files from HEADS that are Ruby" in {
+    val files = api.getRepositories.filter("is_fork = false")
+      .getHEAD
+      .getCommits.getFirstReferenceCommit
+      .getFiles.classifyLanguages
+    val out = files.filter(files("lang") === "Ruby").count()
+    out should be(169)
+  }
+
+  // TODO no results
+  "Default source" should "get the first commit of any reference that his content start" +
+    " with 'import'" in {
+    val out = api.getRepositories
+      .getReferences.show()
+    //      .getCommits.getFirstReferenceCommit
+    //      .getFiles.show()
+  }
+
+  "Default source" should "load correctly" in {
+
+    val reposDf = SparkAPI(ss, resourcePath).getRepositories
+    ss.sqlContext.setConf(repositoriesPathKey, resourcePath)
 
     reposDf.filter("is_fork=true or is_fork is null").show()
 
     reposDf.filter("array_contains(urls, 'urlA')").show()
 
-    val referencesDf = ss.read.format("tech.sourced.api")
-      .option("table", "references")
-      .load(resourcePath)
+    val referencesDf = reposDf.getReferences
 
     referencesDf.filter("repository_id = 'ID1'").show()
 
-    val commitsDf = ss.read.format("tech.sourced.api")
-      .option("table", "commits")
-      .load(resourcePath)
+    val commitsDf = referencesDf.getCommits
 
     commitsDf.show()
 
     info("Files/blobs (without commit hash filtered) at HEAD or every ref:\n")
-    val filesDf = ss.read.format("tech.sourced.api")
-      .option("table", "files")
-      .load(resourcePath)
+    val filesDf = commitsDf.getFiles
 
     filesDf.explain(true)
     filesDf.show()
@@ -71,6 +107,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
       .getRepositories.filter($"id" === "github.com/mawag/faq-xiyoulinux")
       .getReferences.getHEAD
       .getFiles
+      .select("repository_id", "name", "path", "commit_hash", "file_hash", "content", "is_binary")
 
     val cnt = filesDf.count()
     info(s"Total $cnt rows")
@@ -80,7 +117,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
 
     info("UAST for files:\n")
     val filesCols = filesDf.columns.length
-    val uasts = filesDf.classifyLanguages.extractUASTs()
+    val uasts = filesDf.classifyLanguages.extractUASTs
     uasts.show()
     val uastsCols = uasts.columns.length
     assert(uastsCols - 2 == filesCols)
@@ -135,7 +172,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
     val df = SparkAPI(spark, resourcePath).getRepositories.getMaster
 
     df.explain(true)
-    df.show(false)
+    df.show
     assert(df.count == 5)
   }
 
@@ -155,8 +192,8 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
       .getFirstReferenceCommit.getFiles
 
     df.explain(true)
-    df.show
-    assert(df.count == 459)
+    df.show(300)
+    assert(df.count == 0)
   }
 
   "Get files after reading commits" should "return the correct files" in {
@@ -215,4 +252,9 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
     assert(files.count == 86)
   }
 
+  override protected def afterAll(): Unit = {
+    super.afterAll()
+
+    api = _: SparkAPI
+  }
 }

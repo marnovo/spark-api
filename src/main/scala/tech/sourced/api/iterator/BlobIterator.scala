@@ -26,7 +26,7 @@ class BlobIterator(finalColumns: Array[String],
   override def getFilters(currentRow: RawRow): Seq[CompiledFilter] = {
     if (currentRow != null) {
       val id = currentRow("repository_id")().toString
-      val refName = currentRow("reference_name")().toString
+      val refName = currentRow.getOrElse("reference_name", currentRow("name"))().toString
       val hash = currentRow("hash")().toString
       filters ++ Seq(
         EqualExpr(Attr("repository_id", "commits"), id),
