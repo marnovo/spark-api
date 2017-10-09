@@ -15,13 +15,13 @@ object Filter {
     */
   def compile(e: Expression): CompiledFilter = e match {
     case Equality(attr: AttributeReference, Literal(value, _)) =>
-      EqualExpr(new Attr(attr.toAttribute), value)
+      EqualFilter(new Attr(attr.toAttribute), value)
 
     case IsNull(attr: AttributeReference) =>
-      EqualExpr(new Attr(attr.toAttribute), null)
+      EqualFilter(new Attr(attr.toAttribute), null)
 
     case IsNotNull(attr: AttributeReference) =>
-      NotFilter(EqualExpr(new Attr(attr.toAttribute), null))
+      NotFilter(EqualFilter(new Attr(attr.toAttribute), null))
 
     case Not(expr) => NotFilter(compile(expr))
 
@@ -65,7 +65,8 @@ sealed trait CompiledFilter {
     * @return matching cases
     */
   protected def getMatchingCases: Array[(String, Any)] = this match {
-    case EqualExpr(attr, value) => Array((attr.name, value))
+    case EqualFilter(attr, value) => Array((attr.name, value))
+    case InFilter(attr, values) => values.toArray.map(v => (attr.name, v))
     case BinaryFilter(left, right) => left.getMatchingCases ++ right.getMatchingCases
     case _ => Array()
   }
@@ -166,7 +167,7 @@ object BinaryFilter {
   * @param attr  column attribute
   * @param value value to check
   */
-case class EqualExpr(attr: Attr, value: Any) extends CompiledFilter {
+case class EqualFilter(attr: Attr, value: Any) extends CompiledFilter {
 
   /** @inheritdoc */
   override def toString: String = s"${attr.name} = '$value'"

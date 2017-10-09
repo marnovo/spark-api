@@ -68,30 +68,43 @@ abstract class RootedRepoIterator[T](finalColumns: Array[String],
     * @inheritdoc
     */
   override def hasNext: Boolean = {
+    // If there is no previous iter just load the iterator the first pass
+    // and use hasNext of iter all the times. We return here to get rid of
+    // this logic and assume from this point on that prevIter is not null
     if (prevIter == null) {
       if (iter == null) {
         iter = loadIterator
       }
 
-      iter.hasNext
-    } else if (iter == null) {
-      if (prevIter != null && !prevIter.hasNext) {
+      return iter.hasNext
+    }
+
+    // If the iter is not loaded, do so, but only if there are actually more
+    // rows in the prev iter. If there are, just load the iter and preload
+    // the prevITerCurrentRow.
+    if (iter == null) {
+      if (!prevIter.hasNext) {
         return false
       }
 
       prevIterCurrentRow = prevIter.nextRaw
       iter = loadIterator
-      iter.hasNext
-    } else if (!iter.hasNext) {
-      if (prevIter != null && !prevIter.hasNext) {
+    }
+
+    // if iter is empty, we need to check if there are more rows in the prev iter
+    // if not, just finish. If there are, preload the next raw row of the prev iter
+    // and load the iterator again for the prev iter current row
+    iter.hasNext || {
+      if (!prevIter.hasNext) {
         return false
       }
 
       prevIterCurrentRow = prevIter.nextRaw
       iter = loadIterator
-      iter.hasNext
-    } else {
-      true
+
+      // recursively check if it has more items, maybe there are no results for
+      // this prevIter row but there are for the next
+      hasNext
     }
   }
 
@@ -109,7 +122,8 @@ abstract class RootedRepoIterator[T](finalColumns: Array[String],
 
 
   def nextRaw: RawRow = {
-    val row = mapColumns(iter.next())
+    currentRow = iter.next
+    val row = mapColumns(currentRow)
     if (prevIterCurrentRow != null) {
       prevIterCurrentRow ++ row
     } else {

@@ -53,7 +53,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
 
     info("Files/blobs with commit hashes:\n")
     val filesDf = refsDf.getCommits.getFiles.select(
-      "repository_id", "reference_name", "path", "commit_hash", "file_hash"
+      "path", "commit_hash", "file_hash"
     )
     filesDf.explain(true)
     filesDf.show()
@@ -126,7 +126,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
     val spark = ss
     val df = SparkAPI(spark, resourcePath).getRepositories.getHEAD
     df.show
-    assert(df.count == 1)
+    assert(df.count == 5)
   }
 
   "Filter by master reference" should "return only master references" in {
@@ -155,15 +155,15 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
 
     df.explain(true)
     df.show
-    assert(df.count == 459)
+    assert(df.count == 457)
   }
 
   "Get files after reading commits" should "return the correct files" in {
     val spark = ss
     val files = SparkAPI(spark, resourcePath).getRepositories.getReferences.getCommits.getFiles
 
-    files.show(100)
-    assert(files.count == 1536360)
+    files.show
+    assert(files.count == 91944)
   }
 
   "Get files without reading commits" should "return the correct files" in {
@@ -171,7 +171,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
     val api = SparkAPI(spark, resourcePath)
     val files = api.getRepositories.getReferences.getFiles
 
-    assert(files.count == 19126)
+    assert(files.count == 91944)
   }
 
   "Get files" should "return the correct files" in {
@@ -188,7 +188,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
     val files = SparkAPI(spark, resourcePath)
       .getFiles(repositories.distinct, List("refs/heads/HEAD"), hashes.distinct)
 
-    assert(files.count == 745)
+    assert(files.count == 655)
   }
 
   "Get files by repository" should "return the correct files" in {
@@ -196,7 +196,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
     val files = SparkAPI(spark, resourcePath)
       .getFiles(repositoryIds = List("github.com/xiyou-linuxer/faq-xiyoulinux"))
 
-    assert(files.count == 20048)
+    assert(files.count == 2421)
   }
 
   "Get files by reference" should "return the correct files" in {
@@ -204,7 +204,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
     val files = SparkAPI(spark, resourcePath)
       .getFiles(referenceNames = List("refs/heads/develop"))
 
-    assert(files.count == 404)
+    assert(files.count == 425)
   }
 
   "Get files by commit" should "return the correct files" in {
@@ -213,7 +213,7 @@ class DefaultSourceSpec extends FlatSpec with Matchers with BaseSivaSpec with Ba
       .getFiles(commitHashes = List("fff7062de8474d10a67d417ccea87ba6f58ca81d"))
     files.explain(true)
 
-    assert(files.count == 86)
+    assert(files.count == 2)
   }
 
 }

@@ -1,7 +1,7 @@
 package tech.sourced.api.iterator
 
 import org.eclipse.jgit.lib.{ObjectId, Ref, Repository}
-import tech.sourced.api.util.{Attr, CompiledFilter, EqualExpr, Filter}
+import tech.sourced.api.util.{Attr, CompiledFilter, EqualFilter, Filter}
 
 import scala.collection.JavaConverters._
 

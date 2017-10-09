@@ -5,7 +5,9 @@ import org.eclipse.jgit.diff.RawText
 import org.eclipse.jgit.lib.{ObjectId, ObjectReader, Repository}
 import org.eclipse.jgit.treewalk.TreeWalk
 import org.slf4j.Logger
-import tech.sourced.api.util.{Attr, CompiledFilter, EqualExpr}
+import tech.sourced.api.util.CompiledFilter
+
+import scala.collection.mutable
 
 /**
   * Iterator that will return rows of files in a repository.
@@ -21,16 +23,23 @@ class BlobIterator(finalColumns: Array[String],
                    filters: Seq[CompiledFilter])
   extends RootedRepoIterator[CommitTree](finalColumns, repo, prevIter, filters) with Logging {
 
-  /** @inheritdoc*/
+  private val computed = mutable.HashSet[String]()
+
+  /** @inheritdoc */
   override protected def loadIterator(filters: Seq[CompiledFilter]): Iterator[CommitTree] = {
-    CommitIterator.loadIterator(
-      repo,
-      Option(prevIter) match {
-        case Some(it) => Option(it.currentRow).map(_.ref)
-        case None => None
-      },
-      filters.flatMap(_.matchingCases)
-    ).flatMap(c => {
+    val commitIter = Option(prevIter) match {
+      case Some(it) =>
+        val commitId = it.currentRow.commit.getId.getName
+        if (computed.contains(commitId)) {
+          return Seq().toIterator
+        }
+
+        computed.add(commitId)
+        Seq(it.currentRow).toIterator
+      case None => CommitIterator.loadIterator(repo, None, filters.flatMap(_.matchingCases))
+    }
+
+    commitIter.flatMap(c => {
       val commitId = c.commit.getId
       if (repo.hasObject(commitId)) {
         JGitBlobIterator(getCommitTree(commitId), log)
@@ -40,7 +49,7 @@ class BlobIterator(finalColumns: Array[String],
     })
   }
 
-  /** @inheritdoc*/
+  /** @inheritdoc */
   override protected def mapColumns(commitTree: CommitTree): Map[String, () => Any] = {
     val content = BlobIterator.readFile(
       commitTree.tree.getObjectId(0),
@@ -117,7 +126,7 @@ object BlobIterator {
 class JGitBlobIterator[T <: CommitTree](commitTree: T, log: Logger) extends Iterator[T] {
   var wasAlreadyMoved = false
 
-  /** @inheritdoc*/
+  /** @inheritdoc */
   override def hasNext: Boolean = {
     if (wasAlreadyMoved) {
       return true
@@ -136,7 +145,7 @@ class JGitBlobIterator[T <: CommitTree](commitTree: T, log: Logger) extends Iter
     hasNext
   }
 
-  /** @inheritdoc*/
+  /** @inheritdoc */
   override def next(): T = {
     if (!wasAlreadyMoved) {
       moveIteratorSkippingMissingObj

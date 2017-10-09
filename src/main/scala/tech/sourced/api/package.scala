@@ -147,7 +147,7 @@ package object api {
       val filesDf = getDataSource("files", df.sparkSession)
 
       if (df.schema.fieldNames.contains("index")) {
-        val commitsDf = df.select("hash", "reference_name", "repository_id")
+        val commitsDf = df.select("hash")
         filesDf.join(commitsDf, filesDf("commit_hash") === commitsDf("hash")).drop($"hash")
       } else {
         checkCols(df, "name")
