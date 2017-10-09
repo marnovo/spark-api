@@ -83,11 +83,13 @@ object ReferenceIterator {
         RepositoryIterator.loadIterator(repo, filters, "repository_id").toArray
     }
 
-    repo.getAllRefs.asScala.values.toIterator.filter(ref => {
+    val out = repo.getAllRefs.asScala.values.filter(ref => {
       val (repoId, refName) = RootedRepo.parseRef(repo, ref.getName)
       (repoIds.isEmpty || repoIds.contains(repoId)) &&
         (referenceNames.isEmpty || referenceNames.contains(refName))
     })
+
+    out.toIterator
   }
 
 }

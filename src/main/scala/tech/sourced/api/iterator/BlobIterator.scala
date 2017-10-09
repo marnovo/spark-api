@@ -23,6 +23,7 @@ class BlobIterator(finalColumns: Array[String],
                    filters: Seq[CompiledFilter])
   extends RootedRepoIterator[CommitTree](finalColumns, repo, prevIter, filters) with Logging {
 
+
   private val computed = mutable.HashSet[String]()
 
   /** @inheritdoc */
